@@ -122,15 +122,15 @@ bool NeighOrch::hasNextHop(const NextHopKey &nexthop)
     return m_syncdNextHops.find(nexthop) != m_syncdNextHops.end();
 }
 
-bool NeighOrch::addNextHop(const IpAddress &ipAddress, const string &alias)
+bool NeighOrch::addNextHop(const NextHopKey &nexthop)
 {
     SWSS_LOG_ENTER();
 
     Port p;
-    if (!gPortsOrch->getPort(alias, p))
+    if (!gPortsOrch->getPort(nexthop.alias, p))
     {
         SWSS_LOG_ERROR("Neighbor %s seen on port %s which doesn't exist",
-                        ipAddress.to_string().c_str(), alias.c_str());
+                        nexthop.ip_address.to_string().c_str(), nexthop.alias.c_str());
         return false;
     }
     if (p.m_type == Port::SUBPORT)
@@ -138,24 +138,44 @@ bool NeighOrch::addNextHop(const IpAddress &ipAddress, const string &alias)
         if (!gPortsOrch->getPort(p.m_parent_port_id, p))
         {
             SWSS_LOG_ERROR("Neighbor %s seen on sub interface %s whose parent port doesn't exist",
-                            ipAddress.to_string().c_str(), alias.c_str());
+                            nexthop.ip_address.to_string().c_str(), nexthop.alias.c_str());
             return false;
         }
     }
 
-    NextHopKey nexthop = { ipAddress, alias };
     assert(!hasNextHop(nexthop));
-    sai_object_id_t rif_id = m_intfsOrch->getRouterIntfsId(alias);
+    sai_object_id_t rif_id = m_intfsOrch->getRouterIntfsId(nexthop.alias);
 
     vector<sai_attribute_t> next_hop_attrs;
 
     sai_attribute_t next_hop_attr;
-    next_hop_attr.id = SAI_NEXT_HOP_ATTR_TYPE;
-    next_hop_attr.value.s32 = SAI_NEXT_HOP_TYPE_IP;
-    next_hop_attrs.push_back(next_hop_attr);
+    uint32_t lstack[10];
+    if (nexthop.label_stack.getSize())
+    {
+        next_hop_attr.id = SAI_NEXT_HOP_ATTR_TYPE;
+        next_hop_attr.value.s32 = SAI_NEXT_HOP_TYPE_MPLS;
+        next_hop_attrs.push_back(next_hop_attr);
+
+        next_hop_attr.id = SAI_NEXT_HOP_ATTR_LABELSTACK;
+        set<Label> label_set = nexthop.label_stack.getLabelStack();
+        int i = 0;
+        for (auto it : label_set)
+        {
+            lstack[i++] = it;
+        }
+        next_hop_attr.value.u32list.list = lstack;
+        next_hop_attr.value.u32list.count = (uint32_t)nexthop.label_stack.getSize();
+        next_hop_attrs.push_back(next_hop_attr);
+    }
+    else
+    {
+        next_hop_attr.id = SAI_NEXT_HOP_ATTR_TYPE;
+        next_hop_attr.value.s32 = SAI_NEXT_HOP_TYPE_IP;
+        next_hop_attrs.push_back(next_hop_attr);
+    }
 
     next_hop_attr.id = SAI_NEXT_HOP_ATTR_IP;
-    copy(next_hop_attr.value.ipaddr, ipAddress);
+    copy(next_hop_attr.value.ipaddr, nexthop.ip_address);
     next_hop_attrs.push_back(next_hop_attr);
 
     next_hop_attr.id = SAI_NEXT_HOP_ATTR_ROUTER_INTERFACE_ID;
@@ -166,13 +186,12 @@ bool NeighOrch::addNextHop(const IpAddress &ipAddress, const string &alias)
     sai_status_t status = sai_next_hop_api->create_next_hop(&next_hop_id, gSwitchId, (uint32_t)next_hop_attrs.size(), next_hop_attrs.data());
     if (status != SAI_STATUS_SUCCESS)
     {
-        SWSS_LOG_ERROR("Failed to create next hop %s on %s, rv:%d",
-                       ipAddress.to_string().c_str(), alias.c_str(), status);
+        SWSS_LOG_ERROR("Failed to create next hop %s, rv:%d",
+                       nexthop.to_string().c_str(), status);
         return false;
     }
 
-    SWSS_LOG_NOTICE("Created next hop %s on %s",
-                    ipAddress.to_string().c_str(), alias.c_str());
+    SWSS_LOG_NOTICE("Created next hop %s", nexthop.to_string().c_str());
 
     NextHopEntry next_hop_entry;
     next_hop_entry.next_hop_id = next_hop_id;
@@ -180,15 +199,18 @@ bool NeighOrch::addNextHop(const IpAddress &ipAddress, const string &alias)
     next_hop_entry.nh_flags = 0;
     m_syncdNextHops[nexthop] = next_hop_entry;
 
-    m_intfsOrch->increaseRouterIntfsRefCount(alias);
+    m_intfsOrch->increaseRouterIntfsRefCount(nexthop.alias);
 
-    if (ipAddress.isV4())
+    if (!nexthop.label_stack.getSize())
     {
-        gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_IPV4_NEXTHOP);
-    }
-    else
-    {
-        gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_IPV6_NEXTHOP);
+        if (nexthop.ip_address.isV4())
+        {
+            gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_IPV4_NEXTHOP);
+        }
+        else
+        {
+            gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_IPV6_NEXTHOP);
+        }
     }
 
     gFgNhgOrch->validNextHopInNextHopGroup(nexthop);
@@ -201,8 +223,8 @@ bool NeighOrch::addNextHop(const IpAddress &ipAddress, const string &alias)
     {
         if (setNextHopFlag(nexthop, NHFLAGS_IFDOWN) == false)
         {
-            SWSS_LOG_WARN("Failed to set NHFLAGS_IFDOWN on nexthop %s for interface %s",
-                ipAddress.to_string().c_str(), alias.c_str());
+            SWSS_LOG_WARN("Failed to set NHFLAGS_IFDOWN on nexthop %s",
+                nexthop.to_string().c_str());
         }
     }
     return true;
@@ -316,24 +338,23 @@ bool NeighOrch::ifChangeInformNextHop(const string &alias, bool if_up)
     return rc;
 }
 
-bool NeighOrch::removeNextHop(const IpAddress &ipAddress, const string &alias)
+bool NeighOrch::removeNextHop(const NextHopKey& nexthop)
 {
     SWSS_LOG_ENTER();
 
-    NextHopKey nexthop = { ipAddress, alias };
     assert(hasNextHop(nexthop));
 
     gFgNhgOrch->invalidNextHopInNextHopGroup(nexthop);
 
     if (m_syncdNextHops[nexthop].ref_count > 0)
     {
-        SWSS_LOG_ERROR("Failed to remove still referenced next hop %s on %s",
-                       ipAddress.to_string().c_str(), alias.c_str());
+        SWSS_LOG_ERROR("Failed to remove still referenced next hop %s",
+                       nexthop.to_string().c_str());
         return false;
     }
 
     m_syncdNextHops.erase(nexthop);
-    m_intfsOrch->decreaseRouterIntfsRefCount(alias);
+    m_intfsOrch->decreaseRouterIntfsRefCount(nexthop.alias);
     return true;
 }
 
@@ -565,7 +586,7 @@ bool NeighOrch::addNeighbor(const NeighborEntry &neighborEntry, const MacAddress
             gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_IPV6_NEIGHBOR);
         }
 
-        if (!addNextHop(ip_address, alias))
+        if (!addNextHop(NextHopKey(ip_address, alias)))
         {
             status = sai_neighbor_api->remove_neighbor_entry(&neighbor_entry);
             if (status != SAI_STATUS_SUCCESS)
@@ -704,7 +725,7 @@ bool NeighOrch::removeNeighbor(const NeighborEntry &neighborEntry)
     NeighborUpdate update = { neighborEntry, MacAddress(), false };
     notify(SUBJECT_TYPE_NEIGH_CHANGE, static_cast<void *>(&update));
 
-    removeNextHop(ip_address, alias);
+    removeNextHop(NextHopKey(ip_address, alias));
 
     return true;
 }

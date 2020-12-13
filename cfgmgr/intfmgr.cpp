@@ -405,6 +405,7 @@ bool IntfMgr::doIntfGeneralTask(const vector<string>& keys,
     string nat_zone = "";
     string proxy_arp = "";
     string grat_arp = "";
+    string mpls = "";
 
     for (auto idx : data)
     {
@@ -430,6 +431,10 @@ bool IntfMgr::doIntfGeneralTask(const vector<string>& keys,
         else if (field == "grat_arp")
         {
             grat_arp = value;
+        }
+        else if (field == "mpls")
+        {
+            mpls = value;
         }
 
         if (field == "nat_zone")
@@ -474,6 +479,12 @@ bool IntfMgr::doIntfGeneralTask(const vector<string>& keys,
             if (!nat_zone.empty())
             {
                 FieldValueTuple fvTuple("nat_zone", nat_zone);
+                data.push_back(fvTuple);
+            }
+            /* Set mpls */
+            if (!mpls.empty())
+            {
+                FieldValueTuple fvTuple("mpls", mpls);
                 data.push_back(fvTuple);
             }
         }

@@ -1,9 +1,11 @@
 #ifndef SWSS_NEXTHOPKEY_H
 #define SWSS_NEXTHOPKEY_H
 
+#include "label.h"
 #include "ipaddress.h"
 #include "tokenize.h"
 
+#define LABELSTACK_DELIMITER '+'
 #define NH_DELIMITER '@'
 #define NHG_DELIMITER ','
 #define VRF_PREFIX "Vrf"
@@ -11,8 +13,10 @@ extern IntfsOrch *gIntfsOrch;
 
 struct NextHopKey
 {
+    LabelStack          label_stack;    // MPLS label stack
     IpAddress           ip_address;     // neighbor IP address
     string              alias;          // incoming interface alias
+    uint8_t             weight;         // NH weight for NHGs
 
     NextHopKey() = default;
     NextHopKey(const std::string &ipstr, const std::string &alias) : ip_address(ipstr), alias(alias) {}
@@ -23,6 +27,17 @@ struct NextHopKey
         {
             std::string err = "Error converting " + str + " to NextHop";
             throw std::invalid_argument(err);
+        }
+        std::size_t label_delimiter = str.find(LABELSTACK_DELIMITER);
+        std::string ip_str;
+        if (label_delimiter != std::string::npos)
+        {
+            label_stack = LabelStack(str.substr(0, label_delimiter));
+            ip_str = str.substr(label_delimiter+1);
+        }
+        else
+        {
+            ip_str = str;
         }
         auto keys = tokenize(str, NH_DELIMITER);
         if (keys.size() == 1)
@@ -47,17 +62,25 @@ struct NextHopKey
     }
     const std::string to_string() const
     {
-        return ip_address.to_string() + NH_DELIMITER + alias;
+        string str;
+        if (!label_stack.empty())
+        {
+            str += label_stack.to_string();
+            str += LABELSTACK_DELIMITER;
+        }
+        str += ip_address.to_string() + NH_DELIMITER + alias;
+        return str;
     }
 
     bool operator<(const NextHopKey &o) const
     {
-        return tie(ip_address, alias) < tie(o.ip_address, o.alias);
+        return tie(label_stack, ip_address, alias) < tie(o.label_stack, o.ip_address, o.alias);
     }
 
     bool operator==(const NextHopKey &o) const
     {
-        return (ip_address == o.ip_address) && (alias == o.alias);
+        return (label_stack == o.label_stack) &&
+            (ip_address == o.ip_address) && (alias == o.alias);
     }
 
     bool operator!=(const NextHopKey &o) const

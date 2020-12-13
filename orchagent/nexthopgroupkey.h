@@ -18,6 +18,18 @@ public:
         }
     }
 
+    NextHopGroupKey(const std::string &nexthops, const std::string& weights)
+    {
+        std::vector<std::string> nhv = tokenize(nexthops, NHG_DELIMITER);
+        std::vector<std::string> wtv = tokenize(weights, NHG_DELIMITER);
+        for (uint32_t i = 0; i < nhv.size(); i++)
+        {
+            NextHopKey nh(nhv[i]);
+            nh.weight = (uint8_t)std::stoi(wtv[i]);
+            m_nexthops.insert(nh);
+        }
+    }
+
     inline const std::set<NextHopKey> &getNextHops() const
     {
         return m_nexthops;

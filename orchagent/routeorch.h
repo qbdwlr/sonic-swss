@@ -49,6 +49,10 @@ typedef std::map<sai_object_id_t, RouteTable> RouteTables;
 typedef std::pair<sai_object_id_t, IpAddress> Host;
 /* NextHopObserverTable: Host, next hop observer entry */
 typedef std::map<Host, NextHopObserverEntry> NextHopObserverTable;
+/* LabelRouteTable: destination label, next hop address(es) */
+typedef std::map<Label, NextHopGroupKey> LabelRouteTable;
+/* LabelRouteTables: vrf_id, LabelRouteTable */
+typedef std::map<sai_object_id_t, LabelRouteTable> LabelRouteTables;
 
 struct NextHopObserverEntry
 {
@@ -89,7 +93,7 @@ struct RouteBulkContext
 class RouteOrch : public Orch, public Subject
 {
 public:
-    RouteOrch(DBConnector *db, string tableName, SwitchOrch *switchOrch, NeighOrch *neighOrch, IntfsOrch *intfsOrch, VRFOrch *vrfOrch, FgNhgOrch *fgNhgOrch);
+    RouteOrch(DBConnector *db, vector<table_name_with_pri_t> &tableNames, SwitchOrch *switchOrch, NeighOrch *neighOrch, IntfsOrch *intfsOrch, VRFOrch *vrfOrch, FgNhgOrch *fgNhgOrch);
 
     bool hasNextHopGroup(const NextHopGroupKey&) const;
     sai_object_id_t getNextHopGroupId(const NextHopGroupKey&);
@@ -124,6 +128,7 @@ private:
     bool m_resync;
 
     RouteTables m_syncdRoutes;
+    LabelRouteTables m_syncdLabelRoutes;
     NextHopGroupTable m_syncdNextHopGroups;
 
     std::set<NextHopGroupKey> m_bulkNhgReducedRefCnt;
@@ -139,9 +144,15 @@ private:
     bool addRoutePost(const RouteBulkContext& ctx, const NextHopGroupKey &nextHops);
     bool removeRoutePost(const RouteBulkContext& ctx);
 
+    void addTempLabelRoute(sai_object_id_t, Label, const NextHopGroupKey&);
+    bool addLabelRoute(sai_object_id_t, Label, const NextHopGroupKey&);
+    bool removeLabelRoute(sai_object_id_t, Label);
+
     std::string getLinkLocalEui64Addr(void);
     void        addLinkLocalRouteToMe(sai_object_id_t vrf_id, IpPrefix linklocal_prefix);
 
+    void doLabelTask(Consumer& consumer);
+    void doPrefixTask(Consumer& consumer);
     void doTask(Consumer& consumer);
 };
 
