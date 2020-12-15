@@ -90,6 +90,36 @@ struct RouteBulkContext
     }
 };
 
+struct LabelRouteBulkContext
+{
+    std::deque<sai_status_t>            object_statuses;    // Bulk statuses
+    NextHopGroupKey                     tmp_next_hop;       // Temporary next hop
+    NextHopGroupKey                     nhg;
+    sai_object_id_t                     vrf_id;
+    Label                               label;
+    bool                                excp_intfs_flag;
+    std::vector<string>                 ipv;
+
+    LabelRouteBulkContext()
+        : excp_intfs_flag(false)
+    {
+    }
+
+    // Disable any copy constructors
+    LabelRouteBulkContext(const LabelRouteBulkContext&) = delete;
+    LabelRouteBulkContext(LabelRouteBulkContext&&) = delete;
+
+    void clear()
+    {
+        object_statuses.clear();
+        tmp_next_hop.clear();
+        nhg.clear();
+        ipv.clear();
+        excp_intfs_flag = false;
+        vrf_id = SAI_NULL_OBJECT_ID;
+    }
+};
+
 class RouteOrch : public Orch, public Subject
 {
 public:
@@ -136,6 +166,7 @@ private:
     NextHopObserverTable m_nextHopObservers;
 
     EntityBulker<sai_route_api_t>           gRouteBulker;
+    EntityBulker<sai_mpls_api_t>            gLabelRouteBulker;
     ObjectBulker<sai_next_hop_group_api_t>  gNextHopGroupMemberBulker;
 
     void addTempRoute(RouteBulkContext& ctx, const NextHopGroupKey&);
@@ -144,9 +175,11 @@ private:
     bool addRoutePost(const RouteBulkContext& ctx, const NextHopGroupKey &nextHops);
     bool removeRoutePost(const RouteBulkContext& ctx);
 
-    void addTempLabelRoute(sai_object_id_t, Label, const NextHopGroupKey&);
-    bool addLabelRoute(sai_object_id_t, Label, const NextHopGroupKey&);
-    bool removeLabelRoute(sai_object_id_t, Label);
+    void addTempLabelRoute(LabelRouteBulkContext& ctx, const NextHopGroupKey&);
+    bool addLabelRoute(LabelRouteBulkContext& ctx, const NextHopGroupKey&);
+    bool removeLabelRoute(LabelRouteBulkContext& ctx);
+    bool addLabelRoutePost(const LabelRouteBulkContext& ctx, const NextHopGroupKey &nextHops);
+    bool removeLabelRoutePost(const LabelRouteBulkContext& ctx);
 
     std::string getLinkLocalEui64Addr(void);
     void        addLinkLocalRouteToMe(sai_object_id_t vrf_id, IpPrefix linklocal_prefix);
