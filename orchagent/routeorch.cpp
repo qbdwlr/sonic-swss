@@ -2218,9 +2218,7 @@ bool RouteOrch::addLabelRoutePost(const LabelRouteBulkContext& ctx, const NextHo
             return false;
         }
 
-#if 0 // TODO: CRM support for MPLS routes?
-        gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_MPLS_ROUTE);
-#endif // 0 TODO
+        gCrmOrch->incCrmResUsedCounter(CrmResourceType::CRM_MPLS_INSEG);
 
         /* Increase the ref_count for the next hop (group) entry */
         increaseNextHopRefCount(nextHops);
@@ -2334,9 +2332,7 @@ bool RouteOrch::removeLabelRoutePost(const LabelRouteBulkContext& ctx)
         return false;
     }
 
-#if 0 // TODO: MPLS CRM support?
-    gCrmOrch->decCrmResUsedCounter(CrmResourceType::CRM_MPLS_ROUTE);
-#endif // 0 TODO
+    gCrmOrch->decCrmResUsedCounter(CrmResourceType::CRM_MPLS_INSEG);
 
     /*
      * Decrease the reference count only when the route is pointing to a next hop.

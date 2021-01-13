@@ -25,6 +25,7 @@ enum class CrmResourceType
     CRM_ACL_ENTRY,
     CRM_ACL_COUNTER,
     CRM_FDB_ENTRY,
+    CRM_MPLS_INSEG,
 };
 
 enum class CrmThresholdType
