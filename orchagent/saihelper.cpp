@@ -185,6 +185,7 @@ void initSaiApi()
     sai_log_set(SAI_API_NEXT_HOP,               SAI_LOG_LEVEL_NOTICE);
     sai_log_set(SAI_API_NEXT_HOP_GROUP,         SAI_LOG_LEVEL_NOTICE);
     sai_log_set(SAI_API_ROUTE,                  SAI_LOG_LEVEL_NOTICE);
+    sai_log_set(SAI_API_MPLS,                   SAI_LOG_LEVEL_NOTICE);
     sai_log_set(SAI_API_LAG,                    SAI_LOG_LEVEL_NOTICE);
     sai_log_set(SAI_API_POLICER,                SAI_LOG_LEVEL_NOTICE);
     sai_log_set(SAI_API_TUNNEL,                 SAI_LOG_LEVEL_NOTICE);
